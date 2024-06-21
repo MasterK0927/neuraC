@@ -2,6 +2,7 @@
  *                                                        *
  *                Author: Keshav(@masterK0927)            *
  *                Started: 05/06/2024                     *
+ *                Last Edited: 21st June, 24              *
  *                                                        *
  **********************************************************/
 
@@ -82,6 +83,8 @@ void nn_forward(NN nn);
 float nn_cost(NN nn, Mat ti, Mat to);
 void nn_finite_diff(NN nn, NN nn_g, float eps, Mat ti, Mat to);
 void nn_learn(NN nn, NN nn_g, float rate);
+void nn_backprop(NN nn, NN g, Mat ti, Mat to);
+void nn_zero(NN nn);
 
 #endif // NEURALNETWORK_H_
 
@@ -266,6 +269,51 @@ float nn_cost(NN nn, Mat ti, Mat to){
     return c/n;
 }
 
+
+void nn_backprop(NN nn, NN g, Mat ti, Mat to){
+    NEURALNETWORK_ASSERT(ti.rows == to.rows);
+    NEURALNETWORK_ASSERT(NN_OUTPUT(nn).cols == to.cols);
+    size_t n = ti.rows;
+    nn_zero(g);
+
+    //i - current sample
+    //l - current layer
+    //j - current activation
+    //k - previous activation
+
+    for(size_t i=0; i<n; i++){
+        mat_copy(NN_INPUT(nn), mat_row(ti,i));
+        nn_forward(nn);
+        for(size_t j = 0; j<=nn.count; i++){
+            mat_fill(g.as[j],0);
+        }
+        for(size_t j=0; j<n; j++){
+            MAT_AT(NN_OUTPUT(g),0,j) = MAT_AT(NN_OUTPUT(nn),0,j) - MAT_AT(to, i, j);
+        }
+        for(size_t l = nn.count; l>0; l--){
+            for(size_t j=0; j<nn.as[l].cols; j++){
+                float a = MAT_AT(nn.as[l],0,j);
+                float da = MAT_AT(g.as[l], 0, j);
+                MAT_AT(g.bs[l-1],0,j) += 2*da*a*(1-a);
+                //iterating all the previous activations
+                for(size_t k=0; k<nn.as[l-1].cols; k++){
+
+                    // j = weight matrix col
+                    // k = weight matrix row
+
+                    float pa = MAT_AT(nn.as[l-1],0,k);
+                    float w = MAT_AT(nn.ws[l-1],k,j);
+                    //calculating the partial derivative with activation from prev layer
+                    MAT_AT(g.ws[l-1],k,j)+=2*da*a*(1-a)*pa;
+                    //iterating to the previous layer from current layer
+                    MAT_AT(g.as[l-1],0,k) += 2*da*a*(1-a)*w;
+                }
+            }
+        }
+    }
+}
+
+
 void nn_finite_diff(NN nn, NN nn_g, float eps, Mat ti, Mat to){
     float saved;
     float c = nn_cost(nn,ti,to);
@@ -308,6 +356,15 @@ void nn_learn(NN nn, NN nn_g, float rate){
             }
         }
     }
+}
+
+void nn_zero(NN nn){
+    for(size_t i=0; i<nn.count; i++){
+        mat_fill(nn.ws[i],0);
+        mat_fill(nn.bs[i],0);
+        mat_fill(nn.as[i],0);
+    }
+    mat_fill(nn.as[nn.count],0);
 }
 
 #endif // NEURALNETWORK_IMPLEMENTATION
